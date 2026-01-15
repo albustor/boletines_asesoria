@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boletines Informativos - Asesoría Nacional Informática Educativa</title>
+    <title>Boletines Informativos - Asesoría Nacional</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -278,7 +278,12 @@
 
                 } catch (error) {
                     console.error("Error publishing:", error);
-                    alert("Error al publicar: " + error.message);
+                    // Manejo específico de error de permisos para el usuario
+                    if (error.code === 'permission-denied') {
+                        alert("⚠️ ACCESO DENEGADO POR FIREBASE\n\nNo tienes permiso para escribir en la base de datos.\n\nSOLUCIÓN:\nVe a Firebase Console > Firestore Database > Reglas\ny cambia 'allow read, write: if false;' por 'allow read, write: if true;'");
+                    } else {
+                        alert("Error al publicar: " + error.message);
+                    }
                 } finally {
                     btn.disabled = false;
                     btn.textContent = originalText;
@@ -294,7 +299,12 @@
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft', id));
                 } catch (error) {
-                    alert("Error al eliminar: " + error.message);
+                    // Manejo específico de error de permisos
+                    if (error.code === 'permission-denied') {
+                        alert("⚠️ ACCESO DENEGADO POR FIREBASE\n\nNo tienes permiso para borrar. Revisa las Reglas de Seguridad en la consola de Firebase.");
+                    } else {
+                        alert("Error al eliminar: " + error.message);
+                    }
                     console.error(error);
                 } finally {
                     state.deletingIds.delete(id);
@@ -667,12 +677,13 @@
                         state.error = null; // Clear any previous error
                         render();
                     }, (error) => {
-                        console.error(error);
-                         if (error.code === 'permission-denied') {
+                        if (error.code === 'permission-denied') {
+                            console.warn("Permisos insuficientes detectados. Mostrando guía de ayuda.");
                             state.error = 'permission-denied';
                             state.loading = false;
                             render();
                         } else {
+                            console.error(error);
                             state.loading = false;
                             render();
                         }
@@ -690,4 +701,3 @@
     </script>
 </body>
 </html>
-
