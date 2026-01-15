@@ -102,12 +102,55 @@
         import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, deleteDoc, doc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
         // --- Configuración Firebase ---
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
-        const appFirebase = initializeApp(firebaseConfig);
-        const auth = getAuth(appFirebase);
-        const db = getFirestore(appFirebase);
+        // 1. Intentar obtener configuración automática (Entorno Canvas)
+        let firebaseConfig = {};
+        let appId = 'default-app-id';
+        
+        try {
+            firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        } catch (e) {
+            console.warn("No se detectó configuración automática de entorno.");
+        }
+
+        // --- ÁREA DE CONFIGURACIÓN PERSONAL (Para GitHub) ---
+        // Si vas a subir esto a GitHub Pages, debes crear un proyecto en Firebase y pegar tus datos aquí.
+        // Si 'firebaseConfig' está vacío (porque estamos fuera del Canvas), usaremos estos datos:
+        if (Object.keys(firebaseConfig).length === 0) {
+            firebaseConfig = {
+                // Pega aquí tu configuración de Firebase Console:
+                // apiKey: "...",
+                // authDomain: "...",
+                // projectId: "...",
+                // storageBucket: "...",
+                // messagingSenderId: "...",
+                // appId: "..."
+            };
+            
+            // IMPORTANTE: Para GitHub, define un ID de app fijo si lo deseas, o usa 'public-repo'
+            appId = 'repo-boletines-publico';
+        }
+        // --------------------------------------------------------
+
+        let appFirebase;
+        let auth;
+        let db;
+        let isConfigured = false;
+
+        // Inicialización segura
+        try {
+            if (firebaseConfig.apiKey) {
+                appFirebase = initializeApp(firebaseConfig);
+                auth = getAuth(appFirebase);
+                db = getFirestore(appFirebase);
+                isConfigured = true;
+            } else {
+                console.error("Falta la configuración de Firebase.");
+            }
+        } catch (error) {
+            console.error("Error al inicializar Firebase:", error);
+        }
 
         // --- Estado de la Aplicación ---
         const state = {
@@ -181,6 +224,8 @@
             // --- Acciones de Admin ---
             handlePublish: async (e) => {
                 e.preventDefault();
+                if (!isConfigured) { alert("Error: Firebase no está configurado."); return; }
+
                 const btn = e.target.querySelector('button[type="submit"]');
                 const originalText = btn.textContent;
                 btn.disabled = true;
@@ -219,6 +264,7 @@
                 }
             },
             handleDelete: async (id) => {
+                if (!isConfigured) return;
                 if (!confirm("¿Estás seguro de eliminar este boletín?")) return;
                 
                 state.deletingIds.add(id);
@@ -251,6 +297,31 @@
             
             const main = document.getElementById('main-container');
             
+            // Caso: Error de Configuración (Para GitHub)
+            if (!isConfigured) {
+                main.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 text-center max-w-2xl mx-auto">
+                        <div class="bg-yellow-100 p-4 rounded-full mb-6">
+                            <i data-lucide="database" class="w-12 h-12 text-yellow-600"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Configuración de Base de Datos Requerida</h2>
+                        <p class="text-gray-600 mb-6 leading-relaxed">
+                            Para ver los boletines en este repositorio público (GitHub/Hosting), es necesario conectar una base de datos Firebase.
+                        </p>
+                        <div class="bg-white p-6 rounded-xl border border-gray-200 text-left w-full shadow-sm text-sm">
+                            <p class="font-bold text-gray-800 mb-2">Instrucciones para el Administrador:</p>
+                            <ol class="list-decimal list-inside space-y-2 text-gray-600">
+                                <li>Abre el archivo <code>.html</code> en un editor de código.</li>
+                                <li>Busca la sección comentada como <code>--- ÁREA DE CONFIGURACIÓN PERSONAL ---</code> (cerca de la línea 170).</li>
+                                <li>Pega allí las credenciales <code>apiKey</code>, <code>projectId</code>, etc. de tu proyecto Firebase.</li>
+                            </ol>
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
             if (state.loading) {
                 main.innerHTML = `
                     <div class="flex justify-center py-20">
@@ -270,6 +341,11 @@
 
         function renderNav() {
             const container = document.getElementById('nav-controls');
+            if (!isConfigured) {
+                container.innerHTML = `<span class="text-xs text-yellow-300 font-bold bg-yellow-900/30 px-2 py-1 rounded">Sin Conexión</span>`;
+                return;
+            }
+
             if (state.user && !state.user.isAnonymous) {
                 container.innerHTML = `
                     <button onclick="app.setView('admin')" class="px-3 py-1.5 rounded-md text-sm font-medium transition ${state.view === 'admin' ? 'bg-blue-700 text-white' : 'text-blue-200 hover:text-white'}">
@@ -485,6 +561,8 @@
 
         // Autenticación
         const initAuth = async () => {
+            if (!isConfigured) return;
+
             const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
             if (initialToken) {
                 await signInWithCustomToken(auth, initialToken);
@@ -494,32 +572,37 @@
         };
 
         // Listeners
-        initAuth();
-        
-        onAuthStateChanged(auth, (u) => {
-            state.user = u;
-            if (u) {
-                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'));
-                onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
-                    // Ordenar por fecha descendente
-                    data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-                    state.bulletins = data;
+        if (isConfigured) {
+            initAuth();
+            
+            onAuthStateChanged(auth, (u) => {
+                state.user = u;
+                if (u) {
+                    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'));
+                    onSnapshot(q, (snapshot) => {
+                        const data = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        // Ordenar por fecha descendente
+                        data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                        state.bulletins = data;
+                        state.loading = false;
+                        render();
+                    }, (error) => {
+                        console.error(error);
+                        state.loading = false;
+                        render();
+                    });
+                } else {
                     state.loading = false;
                     render();
-                }, (error) => {
-                    console.error(error);
-                    state.loading = false;
-                    render();
-                });
-            } else {
-                state.loading = false;
-                render();
-            }
-        });
+                }
+            });
+        } else {
+            // Si no está configurado, renderizamos inmediatamente el estado de error
+            render();
+        }
 
     </script>
 </body>
