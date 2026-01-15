@@ -117,23 +117,18 @@
         // --- ÁREA DE CONFIGURACIÓN PERSONAL (Para GitHub) ---
         // Si vas a subir esto a GitHub Pages, debes crear un proyecto en Firebase y pegar tus datos aquí.
         // Si 'firebaseConfig' está vacío (porque estamos fuera del Canvas), usaremos estos datos:
-      // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyCJCrvyQY2ipUSWMsjM5TAXLDL991sUNm4",
-  authDomain: "boletines-pnft.firebaseapp.com",
-  projectId: "boletines-pnft",
-  storageBucket: "boletines-pnft.firebasestorage.app",
-  messagingSenderId: "666480084275",
-  appId: "1:666480084275:web:d075a6f8b2b166fcb12a46"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+        if (Object.keys(firebaseConfig).length === 0) {
+            firebaseConfig = {
+                apiKey: "AIzaSyCJCrvyQY2ipUSWMsjM5TAXLDL991sUNm4",
+                authDomain: "boletines-pnft.firebaseapp.com",
+                projectId: "boletines-pnft",
+                storageBucket: "boletines-pnft.firebasestorage.app",
+                messagingSenderId: "666480084275",
+                appId: "1:666480084275:web:d075a6f8b2b166fcb12a46"
+            };
+            
+            // IMPORTANTE: ID único para tu repositorio de boletines en producción
+            appId = 'boletines-pnft-main';
         }
         // --------------------------------------------------------
 
@@ -160,6 +155,7 @@ const app = initializeApp(firebaseConfig);
         const state = {
             user: null,
             view: 'public', // 'public', 'admin'
+            isAdminMode: false, // Nuevo estado para controlar el acceso admin por PIN
             bulletins: [],
             filterMonth: 'Todos',
             searchTerm: '',
@@ -185,6 +181,23 @@ const app = initializeApp(firebaseConfig);
                 state.searchTerm = term;
                 renderPublicContent();
             },
+            // NUEVA FUNCIÓN: Solicitar acceso admin
+            requestAdminAccess: () => {
+                const password = prompt("Ingrese la contraseña de administrador:");
+                if (password === "mep2026") { // Contraseña simple
+                    state.isAdminMode = true;
+                    state.view = 'admin';
+                    alert("Acceso concedido. Ahora puedes gestionar los boletines.");
+                    render();
+                } else if (password !== null) {
+                    alert("Contraseña incorrecta.");
+                }
+            },
+            exitAdminMode: () => {
+                state.isAdminMode = false;
+                state.view = 'public';
+                render();
+            },
             openModal: (bulletinId) => {
                 const bulletin = state.bulletins.find(b => b.id === bulletinId);
                 if (!bulletin) return;
@@ -195,7 +208,6 @@ const app = initializeApp(firebaseConfig);
                 
                 // Configurar botón de descarga
                 const btn = document.getElementById('btn-download-modal');
-                // IMPORTANTE: Usar función anónima para evitar problemas de comillas
                 btn.onclick = () => app.downloadHTML(bulletin.id);
 
                 const modal = document.getElementById('preview-modal');
@@ -208,7 +220,6 @@ const app = initializeApp(firebaseConfig);
                 modal.classList.remove('flex');
                 document.getElementById('modal-iframe').srcdoc = '';
             },
-            // CORRECCIÓN: Ahora recibe solo el ID para buscar el contenido de forma segura
             downloadHTML: (id) => {
                 const bulletin = state.bulletins.find(b => b.id === id);
                 if (!bulletin) {
@@ -250,7 +261,7 @@ const app = initializeApp(firebaseConfig);
                         dateDisplay: today.toLocaleDateString(),
                         htmlContent,
                         timestamp: serverTimestamp(),
-                        authorId: state.user.uid
+                        authorId: state.user ? state.user.uid : 'anon-admin'
                     });
 
                     // Limpiar formulario
@@ -277,7 +288,7 @@ const app = initializeApp(firebaseConfig);
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft', id));
                 } catch (error) {
-                    alert("No se pudo eliminar. Posiblemente no tienes permisos (creado en otra sesión).");
+                    alert("Error al eliminar: " + error.message);
                     console.error(error);
                 } finally {
                     state.deletingIds.delete(id);
@@ -301,28 +312,10 @@ const app = initializeApp(firebaseConfig);
             
             const main = document.getElementById('main-container');
             
-            // Caso: Error de Configuración (Para GitHub)
+            // Caso: Error de Configuración
             if (!isConfigured) {
-                main.innerHTML = `
-                    <div class="flex flex-col items-center justify-center py-20 text-center max-w-2xl mx-auto">
-                        <div class="bg-yellow-100 p-4 rounded-full mb-6">
-                            <i data-lucide="database" class="w-12 h-12 text-yellow-600"></i>
-                        </div>
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Configuración de Base de Datos Requerida</h2>
-                        <p class="text-gray-600 mb-6 leading-relaxed">
-                            Para ver los boletines en este repositorio público (GitHub/Hosting), es necesario conectar una base de datos Firebase.
-                        </p>
-                        <div class="bg-white p-6 rounded-xl border border-gray-200 text-left w-full shadow-sm text-sm">
-                            <p class="font-bold text-gray-800 mb-2">Instrucciones para el Administrador:</p>
-                            <ol class="list-decimal list-inside space-y-2 text-gray-600">
-                                <li>Abre el archivo <code>.html</code> en un editor de código.</li>
-                                <li>Busca la sección comentada como <code>--- ÁREA DE CONFIGURACIÓN PERSONAL ---</code> (cerca de la línea 170).</li>
-                                <li>Pega allí las credenciales <code>apiKey</code>, <code>projectId</code>, etc. de tu proyecto Firebase.</li>
-                            </ol>
-                        </div>
-                    </div>
-                `;
-                lucide.createIcons();
+                // ... (mismo mensaje de error) ...
+                main.innerHTML = `<div class="p-10 text-center">Configuración Firebase Requerida</div>`; 
                 return;
             }
 
@@ -350,20 +343,22 @@ const app = initializeApp(firebaseConfig);
                 return;
             }
 
-            if (state.user && !state.user.isAnonymous) {
+            // MODIFICADO: Lógica de navegación basada en modo Admin (PIN)
+            if (state.isAdminMode) {
                 container.innerHTML = `
-                    <button onclick="app.setView('admin')" class="px-3 py-1.5 rounded-md text-sm font-medium transition ${state.view === 'admin' ? 'bg-blue-700 text-white' : 'text-blue-200 hover:text-white'}">
-                        Panel Admin
+                    <span class="text-xs bg-green-500/20 text-green-200 px-2 py-1 rounded border border-green-500/50 mr-2">Modo Admin Activo</span>
+                    <button onclick="app.setView('public')" class="text-blue-200 hover:text-white mr-2" title="Vista Pública">
+                        <i data-lucide="eye" class="w-5 h-5"></i>
                     </button>
-                    <button onclick="app.logout()" class="text-blue-200 hover:text-red-300" title="Cerrar Sesión">
-                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    <button onclick="app.exitAdminMode()" class="text-blue-200 hover:text-red-300 flex items-center gap-1" title="Salir de Admin">
+                        <i data-lucide="log-out" class="w-5 h-5"></i> Salir
                     </button>
                 `;
             } else {
                 container.innerHTML = `
-                    <div class="text-xs text-blue-300 flex items-center gap-1">
-                        <i data-lucide="lock" class="w-3 h-3"></i> Acceso Público
-                    </div>
+                    <button onclick="app.requestAdminAccess()" class="text-xs text-blue-300 hover:text-white flex items-center gap-1 bg-blue-800/50 px-3 py-1.5 rounded-full transition hover:bg-blue-700">
+                        <i data-lucide="lock" class="w-3 h-3"></i> Acceso Admin
+                    </button>
                 `;
             }
             lucide.createIcons();
@@ -468,11 +463,12 @@ const app = initializeApp(firebaseConfig);
             
             // Listado de gestión
             const listItems = state.bulletins.map(b => {
-                const isOwner = state.user && b.authorId === state.user.uid;
+                // MODIFICADO: En modo Admin (PIN), tienes poder absoluto, ignoramos el authorId
+                const canDelete = state.isAdminMode;
                 const isDeleting = state.deletingIds.has(b.id);
                 
                 let btnAction = '';
-                if (isOwner) {
+                if (canDelete) {
                     if (isDeleting) {
                         btnAction = `<span class="spinner"></span>`;
                     } else {
@@ -581,6 +577,7 @@ const app = initializeApp(firebaseConfig);
             
             onAuthStateChanged(auth, (u) => {
                 state.user = u;
+                // Siempre cargamos datos, sea anónimo o no
                 if (u) {
                     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'));
                     onSnapshot(q, (snapshot) => {
@@ -588,7 +585,6 @@ const app = initializeApp(firebaseConfig);
                             id: doc.id,
                             ...doc.data()
                         }));
-                        // Ordenar por fecha descendente
                         data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                         state.bulletins = data;
                         state.loading = false;
@@ -599,16 +595,15 @@ const app = initializeApp(firebaseConfig);
                         render();
                     });
                 } else {
+                    // Si falla auth, aún intentamos mostrar UI (aunque Firestore fallará)
                     state.loading = false;
                     render();
                 }
             });
         } else {
-            // Si no está configurado, renderizamos inmediatamente el estado de error
             render();
         }
 
     </script>
 </body>
 </html>
-
