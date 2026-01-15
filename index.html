@@ -1,508 +1,640 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithCustomToken, 
-  signInAnonymously, 
-  onAuthStateChanged, 
-  signOut 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  serverTimestamp,
-  deleteDoc,
-  doc
-} from 'firebase/firestore';
-import { 
-  BookOpen, 
-  Download, 
-  Eye, 
-  Upload, 
-  Calendar, 
-  Search, 
-  LogOut, 
-  Lock, 
-  Trash2,
-  FileCode,
-  CheckCircle,
-  X,
-  Loader2 // Agregado loader
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asesoría y Seguimiento - Alberto José Bustos Ortega</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- CSS Reset & Variables --- */
+        :root {
+            --primary-blue: #2563eb;
+            --dark-blue: #1e40af;
+            --slate-900: #0f172a;
+            --slate-800: #1e293b;
+            --slate-600: #475569;
+            --slate-500: #64748b;
+            --slate-400: #94a3b8;
+            --slate-300: #cbd5e1;
+            --slate-200: #e2e8f0;
+            --slate-100: #f1f5f9;
+            --slate-50: #f8fafc;
+            --white: #ffffff;
+            --orange-100: #ffedd5;
+            --orange-600: #ea580c;
+            --emerald-50: #ecfdf5;
+            --emerald-600: #059669;
+            --purple-300: #d8b4fe;
+            --purple-600: #9333ea;
+        }
 
-// --- Configuración de Firebase ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        * {
+            box-sizing: border-box;
+        }
 
-// --- Componente Principal ---
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [view, setView] = useState('public'); // 'public', 'admin', 'preview'
-  const [bulletins, setBulletins] = useState([]);
-  const [selectedBulletin, setSelectedBulletin] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  // Estados para filtros
-  const [filterMonth, setFilterMonth] = useState('Todos');
-  const [searchTerm, setSearchTerm] = useState('');
+        body {
+            font-family: 'Open Sans', sans-serif;
+            background-color: var(--slate-50);
+            margin: 0;
+            padding: 1rem;
+            color: var(--slate-600);
+        }
 
-  // Autenticación Inicial
-  useEffect(() => {
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsubscribe();
-  }, []);
+        @media (min-width: 768px) {
+            body { padding: 2rem; }
+        }
 
-  // Cargar Boletines desde Firestore
-  useEffect(() => {
-    if (!user) return;
+        h1, h2, h3, h4, h5 {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+        }
 
-    // RULE 1: Strict Paths
-    const q = query(
-      collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'),
-      // RULE 2: No complex ordering here, we sort in memory if needed
-    );
+        a { text-decoration: none; }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      // Sort by date descending in memory
-      data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-      setBulletins(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching bulletins:", error);
-      setLoading(false);
-    });
+        /* --- Layout --- */
+        .main-container {
+            max-width: 56rem;
+            margin: 0 auto;
+            background-color: var(--white);
+            border-radius: 1.5rem;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border: 1px solid var(--slate-100);
+        }
 
-    return () => unsubscribe();
-  }, [user]);
+        /* --- Header --- */
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%);
+            color: var(--white);
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+        }
+        @media (min-width: 768px) {
+            .header { padding: 3rem; }
+        }
 
-  // Función para descargar HTML
-  const downloadHTML = (title, content) => {
-    const element = document.createElement("a");
-    const file = new Blob([content], {type: 'text/html'});
-    element.href = URL.createObjectURL(file);
-    element.download = `${title.replace(/\s+/g, '_')}.html`;
-    document.body.appendChild(element);
-    element.click();
-  };
+        .header-bg-icon {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            opacity: 0.1;
+            display: none;
+        }
+        @media (min-width: 768px) {
+            .header-bg-icon { display: block; }
+        }
 
-  // Filtrado de datos
-  const filteredBulletins = bulletins.filter(b => {
-    const matchesMonth = filterMonth === 'Todos' || b.month === filterMonth;
-    const matchesSearch = b.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          b.summary?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesMonth && matchesSearch;
-  });
+        .header-subtitle {
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #93c5fd;
+            font-weight: bold;
+            font-size: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      {/* --- Navegación --- */}
-      <nav className="bg-blue-900 text-white shadow-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('public')}>
-              <div className="bg-white/10 p-2 rounded-lg">
-                <BookOpen size={24} className="text-blue-200" />
-              </div>
-              <div>
-                <h1 className="font-bold text-lg leading-tight">Boletines Informativos</h1>
-                <p className="text-[10px] text-blue-300 uppercase tracking-wider font-bold">Alberto Bustos Ortega</p>
-                <p className="text-[9px] text-blue-400 uppercase tracking-wider">Asesor Nacional de Formación Tecnológica</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              {user && !user.isAnonymous ? (
-                <>
-                  <button 
-                    onClick={() => setView('admin')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${view === 'admin' ? 'bg-blue-700 text-white' : 'text-blue-200 hover:text-white'}`}
-                  >
-                    Panel Admin
-                  </button>
-                  <button onClick={() => signOut(auth)} className="text-blue-200 hover:text-red-300">
-                    <LogOut size={20} />
-                  </button>
-                </>
-              ) : (
-                <div className="text-xs text-blue-300 flex items-center gap-1">
-                  <Lock size={12} /> Acceso Público
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+        .header-title {
+            font-size: 1.875rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        @media (min-width: 768px) {
+            .header-title { font-size: 3rem; }
+        }
 
-      {/* --- Contenido Principal --- */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        .header-name {
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            margin-top: 0;
+        }
+        @media (min-width: 768px) {
+            .header-name { font-size: 1.5rem; }
+        }
+
+        .date-badge {
+            background-color: rgba(59, 130, 246, 0.3);
+            padding: 0.25rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            backdrop-filter: blur(12px);
+            display: inline-flex;
+            align-items: center;
+            margin-top: 1.5rem;
+            color: white;
+        }
+
+        /* --- Content Area --- */
+        .content-wrapper {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+        }
+        @media (min-width: 768px) {
+            .content-wrapper { padding: 2.5rem; }
+        }
+
+        /* Sections */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #dbeafe;
+            padding-bottom: 0.5rem;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--slate-800);
+        }
+
+        /* Grids */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+        @media (min-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* Cards Dimensión */
+        .card-info {
+            padding: 1.25rem;
+            border-radius: 1rem;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+        .card-blue {
+            background-color: #eff6ff;
+            border-left: 4px solid var(--primary-blue);
+        }
+        .card-blue h4 { color: #1e3a8a; margin-bottom: 0.5rem; text-decoration: underline; }
         
-        {view === 'public' && (
-          <PublicView 
-            bulletins={filteredBulletins} 
-            loading={loading}
-            filterMonth={filterMonth}
-            setFilterMonth={setFilterMonth}
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            onPreview={(b) => setSelectedBulletin(b)}
-            onDownload={downloadHTML}
-          />
-        )}
+        .card-emerald {
+            background-color: #ecfdf5;
+            border-left: 4px solid var(--emerald-600);
+        }
+        .card-emerald h4 { color: #064e3b; margin-bottom: 0.5rem; text-decoration: underline; }
 
-        {view === 'admin' && (
-          <AdminView 
-            user={user} 
-            onSuccess={() => setView('public')}
-            existingBulletins={bulletins}
-          />
-        )}
+        /* Apps Cards */
+        .app-card {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            background-color: white;
+            border: 1px solid var(--slate-200);
+            border-radius: 0.75rem;
+            transition: box-shadow 0.3s;
+        }
+        .app-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .app-icon {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-right: 1rem;
+            transition: all 0.3s;
+        }
+        .app-icon-orange { background-color: var(--orange-100); color: var(--orange-600); }
+        .app-card:hover .app-icon-orange { background-color: var(--orange-600); color: white; }
+        
+        .app-icon-blue { background-color: #dbeafe; color: var(--primary-blue); }
+        .app-card:hover .app-icon-blue { background-color: var(--primary-blue); color: white; }
 
-      </main>
+        .app-title { font-weight: bold; color: var(--slate-800); margin: 0; font-size: 1rem; }
+        .app-desc { font-size: 0.75rem; color: var(--slate-500); margin: 0; }
 
-      {/* --- Modal de Previsualización --- */}
-      {selectedBulletin && (
-        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl animate-fade-in">
-            <div className="bg-gray-100 px-6 py-4 flex justify-between items-center border-b border-gray-200">
-              <div>
-                <h2 className="font-bold text-gray-800 text-lg">{selectedBulletin.title}</h2>
-                <p className="text-xs text-gray-500">{selectedBulletin.dateDisplay}</p>
-              </div>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => downloadHTML(selectedBulletin.title, selectedBulletin.htmlContent)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
-                >
-                  <Download size={16} /> Descargar Recurso
-                </button>
-                <button 
-                  onClick={() => setSelectedBulletin(null)}
-                  className="p-2 hover:bg-gray-200 rounded-full transition text-gray-500"
-                >
-                  <X size={24} />
-                </button>
-              </div>
+        /* IoT Section */
+        .iot-section {
+            background-color: var(--slate-900);
+            color: white;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .iot-bg-icon {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            padding: 1rem;
+            opacity: 0.1;
+        }
+        .iot-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .iot-desc {
+            color: var(--slate-300);
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+            max-width: 32rem;
+            line-height: 1.5;
+        }
+
+        .guide-box {
+            background-color: rgba(30, 41, 59, 0.5);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            border: 1px solid rgba(51, 65, 85, 1);
+            backdrop-filter: blur(4px);
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 10;
+        }
+        .guide-title {
+            color: var(--purple-300);
+            font-weight: bold;
+            margin-bottom: 0.75rem;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .step-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.875rem;
+            color: var(--slate-300);
+        }
+        .step-number {
+            background-color: var(--purple-600);
+            color: white;
+            width: 1.5rem;
+            height: 1.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+            margin-top: 0.125rem;
+        }
+        .sub-list {
+            margin-top: 0.25rem;
+            padding-left: 1rem;
+            list-style-type: disc;
+            color: var(--slate-400);
+            font-size: 0.75rem;
+        }
+
+        .tags { display: flex; gap: 1rem; position: relative; z-index: 10; }
+        .tag {
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-family: monospace;
+            border: 1px solid;
+        }
+        .tag-purple { background-color: rgba(168, 85, 247, 0.2); color: var(--purple-300); border-color: rgba(168, 85, 247, 0.3); }
+        .tag-blue { background-color: rgba(59, 130, 246, 0.2); color: #93c5fd; border-color: rgba(59, 130, 246, 0.3); }
+
+        /* Video Playlist */
+        .playlist-badge {
+            font-size: 0.75rem;
+            color: var(--slate-500);
+            background-color: var(--slate-100);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            border: 1px solid var(--slate-200);
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        @media (min-width: 640px) {
+            .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        .video-card {
+            background: white;
+            border: 1px solid var(--slate-200);
+            border-radius: 0.75rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.3s;
+        }
+        .video-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .video-thumb {
+            position: relative;
+            height: 8rem;
+            overflow: hidden;
+            background-color: var(--slate-100);
+        }
+        .video-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s;
+        }
+        .video-card:hover .video-thumb img { transform: scale(1.05); }
+        .play-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .video-card:hover .play-overlay { opacity: 1; }
+        
+        .video-body {
+            padding: 0.75rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .video-title {
+            font-size: 0.875rem;
+            font-weight: bold;
+            color: var(--slate-800);
+            margin: 0 0 0.25rem 0;
+            line-height: 1.25;
+        }
+        .video-desc {
+            font-size: 0.625rem;
+            color: var(--slate-500);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin: 0;
+        }
+        .video-link {
+            font-size: 0.625rem;
+            font-weight: bold;
+            color: var(--primary-blue);
+            margin-top: 0.5rem;
+            display: block;
+        }
+        .video-card:hover .video-link { text-decoration: underline; }
+
+        .credits {
+            margin-top: 1rem;
+            font-size: 0.625rem;
+            color: var(--slate-400);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-align: center;
+        }
+        @media (min-width: 640px) { .credits { text-align: right; } }
+
+        /* --- Footer --- */
+        .footer {
+            background-color: var(--slate-50);
+            border-top: 1px solid var(--slate-100);
+            padding: 2.5rem;
+            text-align: center;
+        }
+        .footer h4 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: var(--slate-900);
+            margin-bottom: 0.25rem;
+        }
+        .footer p {
+            color: var(--slate-600);
+            font-weight: 500;
+            margin: 0;
+            font-size: 1rem;
+        }
+        .footer-links {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            color: var(--slate-400);
+            font-size: 0.875rem;
+        }
+        .footer-links a {
+            color: var(--slate-400);
+            transition: color 0.3s;
+        }
+        .footer-links a:hover { color: var(--primary-blue); }
+        .footer-badge {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: bold;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        
+        <header class="header">
+            <div class="header-bg-icon">
+                <i class="fas fa-graduation-cap fa-6x"></i>
             </div>
-            <div className="flex-1 bg-gray-50 relative">
-              {/* IFRAME Seguro para renderizar el HTML del boletín sin romper estilos de la app */}
-              <iframe 
-                srcDoc={selectedBulletin.htmlContent}
-                title="Preview"
-                className="w-full h-full border-0"
-                sandbox="allow-scripts" 
-              />
+            <p class="header-subtitle">MEP | Asesoría Nacional de Formación Tecnológica</p>
+            <h1 class="header-title">Asesoría y Seguimiento</h1>
+            <h2 class="header-name">Alberto José Bustos Ortega</h2>
+            
+            <div style="display: flex; justify-content: center;">
+                <span class="date-badge">
+                    <i class="far fa-calendar-check" style="margin-right: 0.5rem;"></i> 15 de enero, 2026
+                </span>
             </div>
-          </div>
-        </div>
-      )}
+        </header>
 
-      <footer className="mt-12 py-8 bg-white border-t border-gray-200 text-center">
-        <p className="text-gray-600 font-medium">Alberto José Bustos Ortega</p>
-        <p className="text-gray-400 text-sm">Asesor Nacional de Recursos Tecnológicos en Educación</p>
-        <p className="text-gray-400 text-xs mt-2">© 2026 MEP - MITDE</p>
-      </footer>
-    </div>
-  );
-}
+        <div class="content-wrapper">
 
-// --- Componente Vista Pública ---
-function PublicView({ bulletins, loading, filterMonth, setFilterMonth, searchTerm, setSearchTerm, onPreview, onDownload }) {
-  const months = ['Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-  return (
-    <div className="space-y-8">
-      {/* Header Público */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 opacity-10 transform translate-x-10 -translate-y-10">
-          <BookOpen size={200} />
-        </div>
-        <div className="relative z-10 max-w-2xl">
-          <h2 className="text-3xl font-bold mb-4">Recursos Educativos e Infográficos</h2>
-          <p className="text-blue-100 text-lg leading-relaxed mb-6">
-            Acceso centralizado a los boletines diarios de Formación Tecnológica recolectados, analizados, seleccionados y distribuidos utilizando IA (con validación de Alberto). Material descargable para docentes de secundaria, enfocado en Dimensión 1, 2 y Dimensión 1 y 2.
-          </p>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-20 z-40">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input 
-            type="text" 
-            placeholder="Buscar por título o tema..." 
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-          {months.map(m => (
-            <button
-              key={m}
-              onClick={() => setFilterMonth(m)}
-              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
-                filterMonth === m 
-                  ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' 
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Grid de Contenido */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : bulletins.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
-          <FileCode size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500">No se encontraron boletines con los filtros actuales.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bulletins.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition duration-300 flex flex-col overflow-hidden group">
-              <div className="h-3 bg-blue-500 w-full"></div>
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex justify-between items-start mb-4">
-                  <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
-                    {item.month} {item.year}
-                  </span>
-                  <span className="text-gray-400 text-xs flex items-center gap-1">
-                    <Calendar size={12} /> {item.dateDisplay}
-                  </span>
+            <section>
+                <div class="section-header">
+                    <i class="fas fa-bullhorn" style="color: var(--primary-blue); font-size: 1.5rem;"></i>
+                    <h3 class="section-title">Actualidad: Hacia la Dimensión 1 y 2</h3>
                 </div>
-                
-                <h3 className="font-bold text-xl text-gray-800 mb-2 leading-snug group-hover:text-blue-600 transition">
-                  {item.title}
+                <div class="grid-2">
+                    <div class="card-info card-blue">
+                        <h4>Dimensión 1: Formación Específica</h4>
+                        <p style="margin: 0;"><strong>Ciencia de Datos</strong>. El uso de datasets reales de Costa Rica (como datos climáticos del IMN) permite a los estudiantes de secundaria analizar patrones mediante una integración de información real y contextualizada, lo cual promueve significativamente su interés.</p>
+                    </div>
+                    <div class="card-info card-emerald">
+                        <h4>Dimensión 2: Integración Curricular</h4>
+                        <p style="margin: 0;">La integración con <strong>Español</strong> cobra fuerza: uso de herramientas de IA generativa para la creación de guiones literarios, donde el estudiante debe "curar" y corregir lo que la IA propone (Pensamiento Crítico).</p>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div class="section-header" style="border: none; padding: 0; margin-bottom: 1.5rem;">
+                    <i class="fas fa-toolbox" style="color: var(--orange-600); font-size: 1.5rem; margin-right: 0.5rem;"></i>
+                    <h3 class="section-title" style="margin: 0;">Recursos y Apps del Día</h3>
+                </div>
+                <div class="grid-2">
+                    <a href="https://www.tinkercad.com/" target="_blank" class="app-card">
+                        <div class="app-icon app-icon-orange">
+                            <i class="fas fa-cube"></i>
+                        </div>
+                        <div>
+                            <h4 class="app-title">Tinkercad Circuits</h4>
+                            <p class="app-desc">Simulador de IoT y electrónica para secundaria.</p>
+                        </div>
+                    </a>
+                    <a href="https://gemini.google.com/" target="_blank" class="app-card">
+                        <div class="app-icon app-icon-blue">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <div>
+                            <h4 class="app-title">Google Gemini</h4>
+                            <p class="app-desc">Asistente de IA para planificación de GTA.</p>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <section class="iot-section">
+                <div class="iot-bg-icon">
+                    <i class="fas fa-sensor-cloud fa-8x"></i>
+                </div>
+                <h3 class="iot-title">
+                    <i class="fas fa-microchip" style="color: var(--purple-400);"></i> Proyecto IoT: Estación Local
                 </h3>
-                <p className="text-gray-500 text-sm mb-6 line-clamp-3 flex-1">
-                  {item.summary || "Infográfico interactivo con recursos para Formación Tecnológica."}
+                <p class="iot-desc">
+                    Implemente un sistema de alerta de humedad y temperatura en los laboratorios de cómputo usando <strong>Micro:bit</strong>. 
+                    Vincule este dato con la gestión de recursos tecnológicos para proteger el hardware institucional.
                 </p>
 
-                <div className="flex gap-3 mt-auto">
-                  <button 
-                    onClick={() => onPreview(item)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-700 hover:text-blue-700 border border-gray-200 hover:border-blue-200 rounded-lg text-sm font-medium transition"
-                  >
-                    <Eye size={16} /> Ver
-                  </button>
-                  <button 
-                    onClick={() => onDownload(item.title, item.htmlContent)}
-                    className="flex items-center justify-center p-2 bg-gray-50 hover:bg-green-50 text-gray-600 hover:text-green-600 border border-gray-200 hover:border-green-200 rounded-lg transition"
-                    title="Descargar HTML"
-                  >
-                    <Download size={16} />
-                  </button>
+                <div class="guide-box">
+                    <h4 class="guide-title">
+                        <i class="fas fa-list-ol" style="margin-right: 0.5rem;"></i>Guía de Implementación Rápida
+                    </h4>
+                    <ul class="step-list">
+                        <li class="step-item">
+                            <span class="step-number">1</span>
+                            <div>
+                                <strong style="color: white;">Materiales:</strong> Tarjeta Micro:bit V2 (con sensor de temperatura y micrófono integrados) y portabaterías.
+                            </div>
+                        </li>
+                        <li class="step-item">
+                            <span class="step-number">2</span>
+                            <div>
+                                <strong style="color: white;">Lógica (MakeCode):</strong>
+                                <ul class="sub-list">
+                                    <li>Al iniciar: Mostrar ícono "Casa".</li>
+                                    <li>En bucle "Para siempre": Leer temperatura.</li>
+                                    <li>Si Temperatura > 28°C: Mostrar cadena "ALERTA" + Sonido de alarma.</li>
+                                </ul>
+                            </div>
+                        </li>
+                        <li class="step-item">
+                            <span class="step-number">3</span>
+                            <div>
+                                <strong style="color: white;">Análisis de Datos:</strong> Conectar vía USB y usar la función de "Registro de datos" para graficar los cambios térmicos del laboratorio durante una semana.
+                            </div>
+                        </li>
+                    </ul>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
-// --- Componente Panel de Administración ---
-function AdminView({ user, onSuccess, existingBulletins }) {
-  const [htmlInput, setHtmlInput] = useState('');
-  const [title, setTitle] = useState('');
-  const [summary, setSummary] = useState('');
-  const [month, setMonth] = useState('Enero');
-  const [submitting, setSubmitting] = useState(false);
-  const [deletingIds, setDeletingIds] = useState(new Set()); // Estado para tracking de borrado
-
-  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    setSubmitting(true);
-
-    try {
-      const today = new Date();
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'), {
-        title,
-        summary,
-        month,
-        year: today.getFullYear(),
-        dateDisplay: today.toLocaleDateString(),
-        htmlContent: htmlInput,
-        timestamp: serverTimestamp(),
-        authorId: user.uid
-      });
-      
-      setHtmlInput('');
-      setTitle('');
-      setSummary('');
-      setSubmitting(false);
-      onSuccess();
-    } catch (error) {
-      console.error("Error al publicar", error);
-      alert("Error al publicar: " + error.message);
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("¿Estás seguro de eliminar este boletín? Esta acción no se puede deshacer.")) return;
-    
-    // Marcar como 'eliminando' para mostrar feedback visual
-    setDeletingIds(prev => new Set(prev).add(id));
-
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft', id));
-      // Éxito: el onSnapshot actualizará la lista automáticamente
-    } catch (error) {
-      console.error("Error al eliminar", error);
-      alert("No se pudo eliminar el boletín.\n\nPosible causa: No tienes permisos para borrar este elemento (pudo ser creado en una sesión anterior o por otro usuario).\n\nDetalle técnico: " + error.message);
-    } finally {
-      // Remover del estado de 'eliminando'
-      setDeletingIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Columna Izquierda: Formulario de Carga */}
-      <div className="lg:col-span-2 space-y-6">
-        <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
-            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
-              <Upload size={24} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">Publicar Nuevo Boletín</h2>
-              <p className="text-sm text-gray-500">Copia el código HTML generado por Gemini y pégalo aquí.</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Título del Boletín</label>
-                <input 
-                  type="text" 
-                  required
-                  placeholder="Ej: Innovación en IoT - 15 Ene"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
-                <select 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={month}
-                  onChange={e => setMonth(e.target.value)}
-                >
-                  {months.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Resumen Corto (Opcional)</label>
-              <input 
-                type="text" 
-                placeholder="Breve descripción del contenido..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                value={summary}
-                onChange={e => setSummary(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
-                <span>Código HTML (Gemini)</span>
-                <span className="text-xs text-blue-600 cursor-pointer hover:underline" onClick={() => navigator.clipboard.readText().then(t => setHtmlInput(t))}>Pegar del portapapeles</span>
-              </label>
-              <textarea 
-                required
-                rows={10}
-                placeholder="<html>... Pega aquí el código generado por el chat ...</html>"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-xs bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
-                value={htmlInput}
-                onChange={e => setHtmlInput(e.target.value)}
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={submitting}
-              className={`w-full py-3 rounded-lg font-bold text-white shadow-md transition ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              {submitting ? 'Publicando...' : 'Publicar en Repositorio'}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Columna Derecha: Gestión de Existentes */}
-      <div className="lg:col-span-1">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Trash2 size={18} className="text-gray-400" /> Gestionar Contenido
-          </h3>
-          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
-            {existingBulletins.map(b => (
-              <div key={b.id} className="p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm transition flex justify-between items-center group">
-                <div className="overflow-hidden">
-                  <p className="text-sm font-bold text-gray-700 truncate">{b.title}</p>
-                  <p className="text-xs text-gray-400">{b.dateDisplay}</p>
+                <div class="tags">
+                    <span class="tag tag-purple">#IoT_MEP</span>
+                    <span class="tag tag-blue">#SecundariaCR</span>
                 </div>
-                <button 
-                  onClick={() => handleDelete(b.id)}
-                  disabled={deletingIds.has(b.id)}
-                  className={`p-2 rounded-full transition ${
-                    deletingIds.has(b.id) 
-                      ? 'bg-red-50 text-red-400 cursor-not-allowed' 
-                      : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-                  }`}
-                  title="Eliminar"
-                >
-                  {deletingIds.has(b.id) ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Trash2 size={16} />
-                  )}
-                </button>
-              </div>
-            ))}
-            {existingBulletins.length === 0 && <p className="text-sm text-gray-400 italic">No hay boletines publicados.</p>}
-          </div>
+            </section>
+
+            <section>
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <h3 class="section-title" style="margin: 0;">🎥 Videoteca Recomendada</h3>
+                    <span class="playlist-badge">
+                        <i class="fas fa-list-ul" style="margin-right: 0.25rem;"></i> Recursos Clave
+                    </span>
+                </div>
+
+                <div class="grid-3">
+                    
+                    <!-- Video 1 -->
+                    <a href="https://www.youtube.com/watch?v=eyQTOxC2zgg" target="_blank" class="video-card">
+                        <div class="video-thumb">
+                            <img src="https://img.youtube.com/vi/eyQTOxC2zgg/mqdefault.jpg" alt="Intro MakeCode">
+                            <div class="play-overlay">
+                                <i class="fas fa-play" style="color: white;"></i>
+                            </div>
+                        </div>
+                        <div class="video-body">
+                            <div>
+                                <h5 class="video-title">MakeCode desde Cero</h5>
+                                <p class="video-desc">Conceptos básicos de la interfaz de programación para principiantes.</p>
+                            </div>
+                            <span class="video-link">Ver Tutorial &rarr;</span>
+                        </div>
+                    </a>
+
+                    <!-- Video 2 -->
+                    <a href="https://www.youtube.com/watch?v=S5qcjkeP8bg" target="_blank" class="video-card">
+                        <div class="video-thumb">
+                            <img src="https://img.youtube.com/vi/S5qcjkeP8bg/mqdefault.jpg" alt="Proyecto Temperatura">
+                            <div class="play-overlay">
+                                <i class="fas fa-play" style="color: white;"></i>
+                            </div>
+                        </div>
+                        <div class="video-body">
+                            <div>
+                                <h5 class="video-title">Sensor de Temperatura</h5>
+                                <p class="video-desc">Guía paso a paso para programar el termómetro del boletín.</p>
+                            </div>
+                            <span class="video-link">Ver Tutorial &rarr;</span>
+                        </div>
+                    </a>
+
+                    <!-- Video 3 -->
+                    <a href="https://www.youtube.com/watch?v=kvnUfZ-K3YE" target="_blank" class="video-card">
+                        <div class="video-thumb">
+                            <img src="https://img.youtube.com/vi/kvnUfZ-K3YE/mqdefault.jpg" alt="Data Logging">
+                            <div class="play-overlay">
+                                <i class="fas fa-play" style="color: white;"></i>
+                            </div>
+                        </div>
+                        <div class="video-body">
+                            <div>
+                                <h5 class="video-title">¿Qué es Data Logging?</h5>
+                                <p class="video-desc">Aprende a registrar y exportar datos para análisis científico.</p>
+                            </div>
+                            <span class="video-link">Ver Tutorial &rarr;</span>
+                        </div>
+                    </a>
+
+                </div>
+                
+                <p class="credits">Créditos: Micro:bit Educational Foundation & Comunidad Educativa</p>
+            </section>
+
         </div>
-      </div>
+
+        <footer class="footer">
+            <h4>Alberto José Bustos Ortega</h4>
+            <p>Asesor Nacional de Recursos Tecnológicos en Educación</p>
+            <div class="footer-links">
+                <a href="https://www.mep.go.cr" target="_blank"><i class="fas fa-globe" style="margin-right: 0.25rem;"></i> mep.go.cr</a>
+                <span style="color: var(--slate-200);">|</span>
+                <span class="footer-badge">Costa Rica 2026</span>
+            </div>
+        </footer>
+
     </div>
-  );
-}
+
+</body>
+</html>
