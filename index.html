@@ -210,7 +210,20 @@
                 
                 document.getElementById('modal-title').textContent = bulletin.title;
                 document.getElementById('modal-date').textContent = bulletin.dateDisplay;
-                document.getElementById('modal-iframe').srcdoc = bulletin.htmlContent;
+                
+                // --- INYECCIÓN AUTOMÁTICA DE TARGET BLANK ---
+                // Esto soluciona que los enlaces no abran dentro del iframe
+                let content = bulletin.htmlContent;
+                if (!content.includes('<base target="_blank">')) {
+                    if (content.includes('<head>')) {
+                        content = content.replace('<head>', '<head><base target="_blank">');
+                    } else {
+                        // Si es un fragmento sin head, lo inyectamos al inicio
+                        content = `<base target="_blank">` + content;
+                    }
+                }
+                document.getElementById('modal-iframe').srcdoc = content;
+                // --------------------------------------------
                 
                 // Configurar botón de descarga
                 const btn = document.getElementById('btn-download-modal');
