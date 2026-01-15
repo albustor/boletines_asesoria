@@ -117,18 +117,23 @@
         // --- ÁREA DE CONFIGURACIÓN PERSONAL (Para GitHub) ---
         // Si vas a subir esto a GitHub Pages, debes crear un proyecto en Firebase y pegar tus datos aquí.
         // Si 'firebaseConfig' está vacío (porque estamos fuera del Canvas), usaremos estos datos:
-        if (Object.keys(firebaseConfig).length === 0) {
-            firebaseConfig = {
-                apiKey: "AIzaSyCJCrvyQY2ipUSWMsjM5TAXLDL991sUNm4",
-                authDomain: "boletines-pnft.firebaseapp.com",
-                projectId: "boletines-pnft",
-                storageBucket: "boletines-pnft.firebasestorage.app",
-                messagingSenderId: "666480084275",
-                appId: "1:666480084275:web:d075a6f8b2b166fcb12a46"
-            };
-            
-            // IMPORTANTE: ID único para tu repositorio de boletines en producción
-            appId = 'boletines-pnft-main';
+      // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyCJCrvyQY2ipUSWMsjM5TAXLDL991sUNm4",
+  authDomain: "boletines-pnft.firebaseapp.com",
+  projectId: "boletines-pnft",
+  storageBucket: "boletines-pnft.firebasestorage.app",
+  messagingSenderId: "666480084275",
+  appId: "1:666480084275:web:d075a6f8b2b166fcb12a46"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
         }
         // --------------------------------------------------------
 
@@ -606,3 +611,4 @@
     </script>
 </body>
 </html>
+
