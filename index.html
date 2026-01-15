@@ -1,0 +1,508 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  deleteDoc,
+  doc
+} from 'firebase/firestore';
+import { 
+  BookOpen, 
+  Download, 
+  Eye, 
+  Upload, 
+  Calendar, 
+  Search, 
+  LogOut, 
+  Lock, 
+  Trash2,
+  FileCode,
+  CheckCircle,
+  X,
+  Loader2 // Agregado loader
+} from 'lucide-react';
+
+// --- Configuración de Firebase ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// --- Componente Principal ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('public'); // 'public', 'admin', 'preview'
+  const [bulletins, setBulletins] = useState([]);
+  const [selectedBulletin, setSelectedBulletin] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Estados para filtros
+  const [filterMonth, setFilterMonth] = useState('Todos');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Autenticación Inicial
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  // Cargar Boletines desde Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    // RULE 1: Strict Paths
+    const q = query(
+      collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'),
+      // RULE 2: No complex ordering here, we sort in memory if needed
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Sort by date descending in memory
+      data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+      setBulletins(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching bulletins:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Función para descargar HTML
+  const downloadHTML = (title, content) => {
+    const element = document.createElement("a");
+    const file = new Blob([content], {type: 'text/html'});
+    element.href = URL.createObjectURL(file);
+    element.download = `${title.replace(/\s+/g, '_')}.html`;
+    document.body.appendChild(element);
+    element.click();
+  };
+
+  // Filtrado de datos
+  const filteredBulletins = bulletins.filter(b => {
+    const matchesMonth = filterMonth === 'Todos' || b.month === filterMonth;
+    const matchesSearch = b.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          b.summary?.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesMonth && matchesSearch;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+      {/* --- Navegación --- */}
+      <nav className="bg-blue-900 text-white shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('public')}>
+              <div className="bg-white/10 p-2 rounded-lg">
+                <BookOpen size={24} className="text-blue-200" />
+              </div>
+              <div>
+                <h1 className="font-bold text-lg leading-tight">Boletines Informativos</h1>
+                <p className="text-[10px] text-blue-300 uppercase tracking-wider font-bold">Alberto Bustos Ortega</p>
+                <p className="text-[9px] text-blue-400 uppercase tracking-wider">Asesor Nacional de Formación Tecnológica</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {user && !user.isAnonymous ? (
+                <>
+                  <button 
+                    onClick={() => setView('admin')}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${view === 'admin' ? 'bg-blue-700 text-white' : 'text-blue-200 hover:text-white'}`}
+                  >
+                    Panel Admin
+                  </button>
+                  <button onClick={() => signOut(auth)} className="text-blue-200 hover:text-red-300">
+                    <LogOut size={20} />
+                  </button>
+                </>
+              ) : (
+                <div className="text-xs text-blue-300 flex items-center gap-1">
+                  <Lock size={12} /> Acceso Público
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* --- Contenido Principal --- */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {view === 'public' && (
+          <PublicView 
+            bulletins={filteredBulletins} 
+            loading={loading}
+            filterMonth={filterMonth}
+            setFilterMonth={setFilterMonth}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            onPreview={(b) => setSelectedBulletin(b)}
+            onDownload={downloadHTML}
+          />
+        )}
+
+        {view === 'admin' && (
+          <AdminView 
+            user={user} 
+            onSuccess={() => setView('public')}
+            existingBulletins={bulletins}
+          />
+        )}
+
+      </main>
+
+      {/* --- Modal de Previsualización --- */}
+      {selectedBulletin && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-6xl h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl animate-fade-in">
+            <div className="bg-gray-100 px-6 py-4 flex justify-between items-center border-b border-gray-200">
+              <div>
+                <h2 className="font-bold text-gray-800 text-lg">{selectedBulletin.title}</h2>
+                <p className="text-xs text-gray-500">{selectedBulletin.dateDisplay}</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => downloadHTML(selectedBulletin.title, selectedBulletin.htmlContent)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition"
+                >
+                  <Download size={16} /> Descargar Recurso
+                </button>
+                <button 
+                  onClick={() => setSelectedBulletin(null)}
+                  className="p-2 hover:bg-gray-200 rounded-full transition text-gray-500"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-gray-50 relative">
+              {/* IFRAME Seguro para renderizar el HTML del boletín sin romper estilos de la app */}
+              <iframe 
+                srcDoc={selectedBulletin.htmlContent}
+                title="Preview"
+                className="w-full h-full border-0"
+                sandbox="allow-scripts" 
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="mt-12 py-8 bg-white border-t border-gray-200 text-center">
+        <p className="text-gray-600 font-medium">Alberto José Bustos Ortega</p>
+        <p className="text-gray-400 text-sm">Asesor Nacional de Recursos Tecnológicos en Educación</p>
+        <p className="text-gray-400 text-xs mt-2">© 2026 MEP - MITDE</p>
+      </footer>
+    </div>
+  );
+}
+
+// --- Componente Vista Pública ---
+function PublicView({ bulletins, loading, filterMonth, setFilterMonth, searchTerm, setSearchTerm, onPreview, onDownload }) {
+  const months = ['Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  return (
+    <div className="space-y-8">
+      {/* Header Público */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 opacity-10 transform translate-x-10 -translate-y-10">
+          <BookOpen size={200} />
+        </div>
+        <div className="relative z-10 max-w-2xl">
+          <h2 className="text-3xl font-bold mb-4">Recursos Educativos e Infográficos</h2>
+          <p className="text-blue-100 text-lg leading-relaxed mb-6">
+            Acceso centralizado a los boletines diarios de Formación Tecnológica recolectados, analizados, seleccionados y distribuidos utilizando IA (con validación de Alberto). Material descargable para docentes de secundaria, enfocado en Dimensión 1, 2 y Dimensión 1 y 2.
+          </p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-20 z-40">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+          <input 
+            type="text" 
+            placeholder="Buscar por título o tema..." 
+            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
+          {months.map(m => (
+            <button
+              key={m}
+              onClick={() => setFilterMonth(m)}
+              className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
+                filterMonth === m 
+                  ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-500' 
+                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grid de Contenido */}
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      ) : bulletins.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
+          <FileCode size={48} className="mx-auto text-gray-300 mb-4" />
+          <p className="text-gray-500">No se encontraron boletines con los filtros actuales.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {bulletins.map((item) => (
+            <div key={item.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition duration-300 flex flex-col overflow-hidden group">
+              <div className="h-3 bg-blue-500 w-full"></div>
+              <div className="p-6 flex-1 flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
+                    {item.month} {item.year}
+                  </span>
+                  <span className="text-gray-400 text-xs flex items-center gap-1">
+                    <Calendar size={12} /> {item.dateDisplay}
+                  </span>
+                </div>
+                
+                <h3 className="font-bold text-xl text-gray-800 mb-2 leading-snug group-hover:text-blue-600 transition">
+                  {item.title}
+                </h3>
+                <p className="text-gray-500 text-sm mb-6 line-clamp-3 flex-1">
+                  {item.summary || "Infográfico interactivo con recursos para Formación Tecnológica."}
+                </p>
+
+                <div className="flex gap-3 mt-auto">
+                  <button 
+                    onClick={() => onPreview(item)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-700 hover:text-blue-700 border border-gray-200 hover:border-blue-200 rounded-lg text-sm font-medium transition"
+                  >
+                    <Eye size={16} /> Ver
+                  </button>
+                  <button 
+                    onClick={() => onDownload(item.title, item.htmlContent)}
+                    className="flex items-center justify-center p-2 bg-gray-50 hover:bg-green-50 text-gray-600 hover:text-green-600 border border-gray-200 hover:border-green-200 rounded-lg transition"
+                    title="Descargar HTML"
+                  >
+                    <Download size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Componente Panel de Administración ---
+function AdminView({ user, onSuccess, existingBulletins }) {
+  const [htmlInput, setHtmlInput] = useState('');
+  const [title, setTitle] = useState('');
+  const [summary, setSummary] = useState('');
+  const [month, setMonth] = useState('Enero');
+  const [submitting, setSubmitting] = useState(false);
+  const [deletingIds, setDeletingIds] = useState(new Set()); // Estado para tracking de borrado
+
+  const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setSubmitting(true);
+
+    try {
+      const today = new Date();
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft'), {
+        title,
+        summary,
+        month,
+        year: today.getFullYear(),
+        dateDisplay: today.toLocaleDateString(),
+        htmlContent: htmlInput,
+        timestamp: serverTimestamp(),
+        authorId: user.uid
+      });
+      
+      setHtmlInput('');
+      setTitle('');
+      setSummary('');
+      setSubmitting(false);
+      onSuccess();
+    } catch (error) {
+      console.error("Error al publicar", error);
+      alert("Error al publicar: " + error.message);
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("¿Estás seguro de eliminar este boletín? Esta acción no se puede deshacer.")) return;
+    
+    // Marcar como 'eliminando' para mostrar feedback visual
+    setDeletingIds(prev => new Set(prev).add(id));
+
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'boletines_pnft', id));
+      // Éxito: el onSnapshot actualizará la lista automáticamente
+    } catch (error) {
+      console.error("Error al eliminar", error);
+      alert("No se pudo eliminar el boletín.\n\nPosible causa: No tienes permisos para borrar este elemento (pudo ser creado en una sesión anterior o por otro usuario).\n\nDetalle técnico: " + error.message);
+    } finally {
+      // Remover del estado de 'eliminando'
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Columna Izquierda: Formulario de Carga */}
+      <div className="lg:col-span-2 space-y-6">
+        <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+              <Upload size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Publicar Nuevo Boletín</h2>
+              <p className="text-sm text-gray-500">Copia el código HTML generado por Gemini y pégalo aquí.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Título del Boletín</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Ej: Innovación en IoT - 15 Ene"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={month}
+                  onChange={e => setMonth(e.target.value)}
+                >
+                  {months.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Resumen Corto (Opcional)</label>
+              <input 
+                type="text" 
+                placeholder="Breve descripción del contenido..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                value={summary}
+                onChange={e => setSummary(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex justify-between">
+                <span>Código HTML (Gemini)</span>
+                <span className="text-xs text-blue-600 cursor-pointer hover:underline" onClick={() => navigator.clipboard.readText().then(t => setHtmlInput(t))}>Pegar del portapapeles</span>
+              </label>
+              <textarea 
+                required
+                rows={10}
+                placeholder="<html>... Pega aquí el código generado por el chat ...</html>"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-xs bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                value={htmlInput}
+                onChange={e => setHtmlInput(e.target.value)}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={submitting}
+              className={`w-full py-3 rounded-lg font-bold text-white shadow-md transition ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {submitting ? 'Publicando...' : 'Publicar en Repositorio'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Columna Derecha: Gestión de Existentes */}
+      <div className="lg:col-span-1">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Trash2 size={18} className="text-gray-400" /> Gestionar Contenido
+          </h3>
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+            {existingBulletins.map(b => (
+              <div key={b.id} className="p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm transition flex justify-between items-center group">
+                <div className="overflow-hidden">
+                  <p className="text-sm font-bold text-gray-700 truncate">{b.title}</p>
+                  <p className="text-xs text-gray-400">{b.dateDisplay}</p>
+                </div>
+                <button 
+                  onClick={() => handleDelete(b.id)}
+                  disabled={deletingIds.has(b.id)}
+                  className={`p-2 rounded-full transition ${
+                    deletingIds.has(b.id) 
+                      ? 'bg-red-50 text-red-400 cursor-not-allowed' 
+                      : 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                  }`}
+                  title="Eliminar"
+                >
+                  {deletingIds.has(b.id) ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Trash2 size={16} />
+                  )}
+                </button>
+              </div>
+            ))}
+            {existingBulletins.length === 0 && <p className="text-sm text-gray-400 italic">No hay boletines publicados.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
