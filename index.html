@@ -89,10 +89,13 @@
     </div>
 
     <!-- FOOTER -->
-    <footer class="mt-12 py-8 bg-white border-t border-gray-200 text-center">
-        <p class="text-gray-600 font-medium">Alberto José Bustos Ortega</p>
-        <p class="text-gray-400 text-sm">Asesor Nacional de Recursos Tecnológicos en Educación</p>
-        <p class="text-gray-400 text-xs mt-2">© 2026 MEP - MITDE</p>
+    <footer class="mt-12 py-8 bg-white border-t border-gray-200 text-center space-y-1">
+        <p class="text-gray-700 font-bold text-lg">Alberto José Bustos Ortega</p>
+        <p class="text-gray-600 text-sm font-medium">Asesor Nacional de Informática Educativa</p>
+        <p class="text-gray-500 text-sm">Programa Nacional de Formación Tecnológica</p>
+        <p class="text-gray-500 text-sm">Dirección de Recursos Tecnológicos en Educación</p>
+        <a href="mailto:alberto.bustos.ortega@mep.go.cr" class="text-blue-600 text-sm hover:underline block mt-2">alberto.bustos.ortega@mep.go.cr</a>
+        <p class="text-gray-400 text-xs mt-4 font-mono">2026</p>
     </footer>
 
     <!-- LOGICA JAVASCRIPT -->
@@ -160,7 +163,9 @@
             filterMonth: 'Todos',
             searchTerm: '',
             deletingIds: new Set(),
-            loading: true
+            loading: true,
+            error: null, // Nuevo estado para errores
+            errorMessage: ''
         };
 
         const months = ['Todos', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -319,6 +324,69 @@
                 return;
             }
 
+            // Caso: Error de Permisos (Firebase Rules)
+            if (state.error === 'permission-denied') {
+                main.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 text-center max-w-2xl mx-auto px-4">
+                        <div class="bg-red-100 p-4 rounded-full mb-6">
+                            <i data-lucide="shield-alert" class="w-12 h-12 text-red-600"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Acceso Denegado por Firebase</h2>
+                        <p class="text-gray-600 mb-6 leading-relaxed">
+                            Las reglas de seguridad de tu proyecto en la nube están bloqueando la conexión.
+                            Esto es normal en proyectos nuevos.
+                        </p>
+                        
+                        <div class="bg-white p-6 rounded-xl border-l-4 border-red-500 shadow-md text-left w-full space-y-4">
+                            <h3 class="font-bold text-gray-800">Cómo solucionarlo (Paso a Paso):</h3>
+                            
+                            <div class="space-y-2">
+                                <p class="text-sm font-semibold text-gray-700">1. Habilitar Modo de Prueba:</p>
+                                <p class="text-sm text-gray-600 ml-4">
+                                    Ve a <a href="https://console.firebase.google.com/" target="_blank" class="text-blue-600 hover:underline">Firebase Console</a> > Firestore Database > <strong>Reglas</strong>.<br>
+                                    Cambia el código a: <code>allow read, write: if true;</code> y dale a <strong>Publicar</strong>.
+                                </p>
+                            </div>
+
+                            <div class="space-y-2">
+                                <p class="text-sm font-semibold text-gray-700">2. Habilitar Auth Anónima:</p>
+                                <p class="text-sm text-gray-600 ml-4">
+                                    Ve a Authentication > Sign-in method > <strong>Anónimo</strong> y actívalo.
+                                </p>
+                            </div>
+                        </div>
+                        <button onclick="location.reload()" class="mt-8 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                            Ya lo arreglé, recargar página
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+             // Caso: Error de Autenticación
+             if (state.error === 'auth-error') {
+                main.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-20 text-center max-w-2xl mx-auto px-4">
+                        <div class="bg-orange-100 p-4 rounded-full mb-6">
+                            <i data-lucide="user-x" class="w-12 h-12 text-orange-600"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">Error de Autenticación</h2>
+                        <p class="text-gray-600 mb-6">No se pudo iniciar sesión anónima en Firebase.</p>
+                        <div class="bg-white p-4 rounded-lg border border-orange-200 text-left text-sm text-gray-700">
+                            <strong>Detalle:</strong> ${state.errorMessage}<br><br>
+                            <strong>Solución:</strong> Ve a Firebase Console > Authentication > Sign-in method y asegúrate de que el proveedor "Anónimo" esté <strong>Habilitado</strong>.
+                        </div>
+                         <button onclick="location.reload()" class="mt-8 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                            Reintentar
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+
             if (state.loading) {
                 main.innerHTML = `
                     <div class="flex justify-center py-20">
@@ -393,7 +461,7 @@
                         <div class="relative z-10 max-w-2xl">
                             <h2 class="text-3xl font-bold mb-4">Recursos Educativos e Infográficos</h2>
                             <p class="text-blue-100 text-lg leading-relaxed mb-6">
-                                Acceso centralizado a los boletines diarios de Formación Tecnológica recolectados, analizados, seleccionados y distribuidos utilizando IA (con validación de Alberto). Material descargable para docentes de secundaria, enfocado en Dimensión 1, 2 y Dimensión 1 y 2.
+                                Acceso centralizado a los boletines diarios de Formación Tecnológica recolectados, analizados, seleccionados y distribuidos utilizando IA (con validación de Alberto). Material descargable para docentes de la modalidad de secundaria, enfocado en Dimensión 1, 2 y Dimensión 1 y 2.
                             </p>
                         </div>
                     </div>
@@ -563,11 +631,18 @@
         const initAuth = async () => {
             if (!isConfigured) return;
 
-            const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-            if (initialToken) {
-                await signInWithCustomToken(auth, initialToken);
-            } else {
-                await signInAnonymously(auth);
+            try {
+                const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (initialToken) {
+                    await signInWithCustomToken(auth, initialToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth Error:", error);
+                state.error = 'auth-error';
+                state.errorMessage = error.message;
+                render();
             }
         };
 
@@ -588,11 +663,18 @@
                         data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                         state.bulletins = data;
                         state.loading = false;
+                        state.error = null; // Clear any previous error
                         render();
                     }, (error) => {
                         console.error(error);
-                        state.loading = false;
-                        render();
+                         if (error.code === 'permission-denied') {
+                            state.error = 'permission-denied';
+                            state.loading = false;
+                            render();
+                        } else {
+                            state.loading = false;
+                            render();
+                        }
                     });
                 } else {
                     // Si falla auth, aún intentamos mostrar UI (aunque Firestore fallará)
